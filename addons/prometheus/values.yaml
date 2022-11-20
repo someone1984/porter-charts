@@ -1233,13 +1233,11 @@ alertmanagerFiles:
   alertmanager.yml:
     global: {}
       # slack_api_url: ''
-
     receivers:
-      - name: default-receiver
-        # slack_configs:
-        #  - channel: '@you'
-        #    send_resolved: true
-
+    - name: porter-agent
+      webhook_configs:
+      - send_resolved: true
+        url: http://porter-agent-controller-manager.porter-agent-system.svc.cluster.local:10001/incidents/alertmanager
     route:
       group_wait: 10s
       group_interval: 5m
@@ -1252,7 +1250,27 @@ serverFiles:
 
   ## Alerts configuration
   ## Ref: https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules/
-  alerting_rules.yml: {}
+  alerting_rules.yml:
+    groups:
+    - name: cpu
+      rules:
+      - alert: CPUSpike
+        expr: |
+          sum by (namespace, pod, container) (
+            rate(container_cpu_usage_seconds_total{container!=""}[3m]) > 0.5 /
+            rate(container_cpu_usage_seconds_total{container!=""}[10m]) > 0.5
+          ) * on (pod, namespace) group_left(node) (kube_pod_info) > 3.0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: |
+            The CPU usage is unexpectedly over the average.
+          detail: |
+            The container {{ $labels.instance }} of the pod
+            {{ $labels.namespace }}/{{ $labels.pod }} has been using three times
+            more CPU on average in the last 3 minutes compared to its average
+            over the last 10 minutes.
   # groups:
   #   - name: Instances
   #     rules:
